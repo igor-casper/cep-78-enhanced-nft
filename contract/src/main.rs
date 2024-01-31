@@ -1357,6 +1357,24 @@ pub extern "C" fn is_approved_for_all() {
 // Assigned.
 #[no_mangle]
 pub extern "C" fn transfer() {
+    // Get information on the caller, extract the package hash if called by a contract
+    let (caller, contract_package): (Key, Option<Key>) =
+    match utils::get_verified_caller().unwrap_or_revert() {
+        Caller::Session(account_hash) => (account_hash.into(), None),
+        Caller::StoredCaller(contract_hash, contract_package_hash) => {
+            (contract_hash.into(), Some(contract_package_hash.into()))
+        }
+    };
+
+    // If the optional filter contract modality is being used, revert unless called specifically
+    // by that filter contract
+    if let Some(filter_contract) = utils::get_transfer_filter_contract() {
+        let caller_is_filter = contract_package == Some(filter_contract);
+        if !caller_is_filter {
+            runtime::revert(NFTCoreError::CallerMustBeTransferFilter);
+        }
+    }
+
     // If we are in minter or assigned mode we are not allowed to transfer ownership of token, hence
     // we revert.
     if let OwnershipMode::Minter | OwnershipMode::Assigned =
@@ -1398,14 +1416,6 @@ pub extern "C" fn transfer() {
     if source_owner_key != owner {
         runtime::revert(NFTCoreError::InvalidAccount);
     }
-
-    let (caller, contract_package): (Key, Option<Key>) =
-        match utils::get_verified_caller().unwrap_or_revert() {
-            Caller::Session(account_hash) => (account_hash.into(), None),
-            Caller::StoredCaller(contract_hash, contract_package_hash) => {
-                (contract_hash.into(), Some(contract_package_hash.into()))
-            }
-        };
 
     // Check if caller is owner
     let is_owner = owner == caller;
@@ -1451,27 +1461,6 @@ pub extern "C" fn transfer() {
     } else {
         false
     };
-
-    if let Some(filter_contract) = utils::get_transfer_filter_contract() {
-        let mut args = RuntimeArgs::new();
-        args.insert(ARG_SOURCE_KEY, source_owner_key).unwrap();
-        args.insert(ARG_TARGET_KEY, owner).unwrap();
-
-        match &token_identifier {
-            TokenIdentifier::Index(idx) => {
-                args.insert(ARG_TOKEN_ID, *idx).unwrap();
-            }
-            TokenIdentifier::Hash(hash) => {
-                args.insert(ARG_TOKEN_ID, hash.clone()).unwrap();
-            }
-        }
-
-        let result: TransferFilterContractResult =
-            call_contract::<u8>(filter_contract, TRANSFER_FILTER_CONTRACT_METHOD, args).into();
-        if TransferFilterContractResult::DenyTransfer == result {
-            revert(NFTCoreError::TransferFilterContractDenied);
-        }
-    }
 
     // Revert if caller is not owner nor approved nor an operator.
     if !is_owner && !is_approved && !is_operator && !is_package_operator {

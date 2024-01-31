@@ -161,7 +161,7 @@ pub enum NFTCoreError {
     InvalidTransferFilterContract = 156,
     MissingTransferFilterContract = 157,
     TransferFilterContractNeedsTransferableMode = 158,
-    TransferFilterContractDenied = 159,
+    CallerMustBeTransferFilter = 159,
     MissingACLWhiteList = 160,
     InvalidACLWhitelist = 161,
     EmptyACLWhitelist = 162,
