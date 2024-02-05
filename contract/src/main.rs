@@ -1369,7 +1369,7 @@ pub extern "C" fn transfer() {
     // If the optional filter contract modality is being used, revert unless called specifically
     // by that filter contract
     if let Some(filter_contract) = utils::get_transfer_filter_contract() {
-        let caller_is_filter = contract_package == Some(filter_contract);
+        let caller_is_filter = caller == filter_contract.into();
         if !caller_is_filter {
             runtime::revert(NFTCoreError::CallerMustBeTransferFilter);
         }
